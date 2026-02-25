@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精准购车推荐问卷</title>
+    <title>购车偏好雷达图分析</title>
     <style>
         * {
             margin: 0;
@@ -127,6 +127,7 @@
             cursor: not-allowed;
         }
 
+        /* 雷达图结果区域 */
         .result-section {
             display: none;
             padding: 10px 0;
@@ -136,39 +137,29 @@
             font-size: 22px;
             font-weight: 700;
             text-align: center;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             color: #2d3748;
         }
 
-        .car-card {
+        .radar-container {
+            position: relative;
+            width: 100%;
+            height: 350px; /* 适配移动端的雷达图高度 */
+            margin: 0 auto 25px;
+        }
+
+        .radar-desc {
             background: #f8f9fa;
             border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-left: 4px solid #38b2ac;
-        }
-
-        .car-name {
-            font-size: 19px;
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-
-        .car-tag {
-            display: inline-block;
-            background: #e6fffa;
-            color: #38b2ac;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            margin-bottom: 10px;
-        }
-
-        .recommend-reason {
+            padding: 15px;
             font-size: 15px;
             color: #4a5568;
             line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .radar-desc strong {
+            color: #38b2ac;
         }
 
         .restart-btn {
@@ -180,7 +171,7 @@
             border-radius: 10px;
             font-size: 17px;
             cursor: pointer;
-            margin-top: 20px;
+            margin-top: 10px;
         }
 
         /* 适配小屏手机 */
@@ -192,14 +183,20 @@
                 padding: 15px 12px;
                 font-size: 15px;
             }
+            .radar-container {
+                height: 300px;
+            }
         }
     </style>
+    <!-- 引入Chart.js（轻量图表库，适配移动端） -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="survey-container">
-        <h1 class="survey-title">你的专属购车推荐</h1>
+        <h1 class="survey-title">你的购车偏好分析</h1>
         <div class="progress-tip" id="progressTip">第 1 题 / 共 12 题</div>
 
+        <!-- 保留原有12道题目（代码未改动，省略重复部分） -->
         <!-- 问题1：预算 -->
         <div class="question-section active" data-id="1">
             <div class="question-text">1. 你的购车预算（落地价）是多少？</div>
@@ -376,15 +373,20 @@
             </ul>
             <div class="btn-group">
                 <button class="nav-btn prev-btn">上一题</button>
-                <button class="nav-btn submit-btn">查看推荐结果</button>
+                <button class="nav-btn submit-btn">查看偏好分析</button>
             </div>
         </div>
 
-        <!-- 结果展示区域 -->
+        <!-- 雷达图结果展示区域 -->
         <div class="result-section" id="resultSection">
-            <h2 class="result-title">为你推荐3款热门车型</h2>
-            <div id="carRecommendList">
-                <!-- 推荐结果会在这里显示 -->
+            <h2 class="result-title">你的购车偏好雷达图</h2>
+            <!-- 雷达图画布 -->
+            <div class="radar-container">
+                <canvas id="preferenceRadarChart"></canvas>
+            </div>
+            <!-- 雷达图解读 -->
+            <div class="radar-desc" id="radarDesc">
+                <!-- 解读文本会在这里生成 -->
             </div>
             <button class="restart-btn" id="restartBtn">重新测试</button>
         </div>
@@ -397,86 +399,10 @@
             answers: {}
         };
 
-        // 销量靠前的车型库（2025年热门车型）
-        const hotCars = {
-            // 预算10万内（总分12-20）
-            budget1: [
-                {
-                    name: "比亚迪海鸥",
-                    tag: "纯电动 | 小型车 | 销量TOP1",
-                    reason: "推荐理由：① 月销超5万台，10万内纯电小车销量冠军；② 续航305-405km满足城市通勤；③ 能耗极低（每公里约0.06元），保养成本仅300元/次；④ 车身小巧好停车，适合1-2人日常使用。"
-                },
-                {
-                    name: "吉利帝豪",
-                    tag: "燃油 | 紧凑型轿车 | 国民家轿",
-                    reason: "推荐理由：① 连续10年月销破万，10万内燃油轿车标杆；② 油耗仅5.8L/100km，使用成本低；③ 空间宽敞（轴距2650mm），满足3-4人出行；④ 保养便宜（400元/次），可靠性高。"
-                },
-                {
-                    name: "五菱宏光MINI EV",
-                    tag: "纯电动 | 微型车 | 代步神器",
-                    reason: "推荐理由：① 累计销量超300万台，代步车销量王者；② 价格3.78万起，极致性价比；③ 车身灵活（长2920mm），停车无压力；④ 每公里电费仅0.05元，适合短途通勤。"
-                }
-            ],
-            // 预算10-20万（总分21-28）
-            budget2: [
-                {
-                    name: "比亚迪宋PLUS DM-i",
-                    tag: "插混 | 紧凑型SUV | 销冠",
-                    reason: "推荐理由：① 月销超6万台，SUV销量榜首；② 亏电油耗4.4L/100km，可油可电无续航焦虑；③ 轴距2765mm，空间满足家庭出行；④ 配置丰富（全景影像/语音控制），性价比极高。"
-                },
-                {
-                    name: "丰田卡罗拉 双擎",
-                    tag: "油混 | 紧凑型轿车 | 全球销冠",
-                    reason: "推荐理由：① 全球销量超5000万台，可靠性公认第一；② 油耗4.0L/100km，月行驶2000km仅需800元油费；③ 保养成本600元/次，后期使用省心；④ 适合注重稳定的家庭用户。"
-                },
-                {
-                    name: "哈弗H6",
-                    tag: "燃油/混动 | 紧凑型SUV | 国民SUV",
-                    reason: "推荐理由：① 连续8年SUV销量冠军，累计销量超300万台；② 空间超大（轴距2738mm），适合多人出行；③ 混动版油耗5.6L/100km，兼顾油耗与通过性；④ 保养成本500-800元/次，性价比高。"
-                }
-            ],
-            // 预算20-30万（总分29-36）
-            budget3: [
-                {
-                    name: "本田CR-V 锐·混动",
-                    tag: "油混 | 紧凑型SUV | 合资标杆",
-                    reason: "推荐理由：① 月销超2万台，合资SUV销量TOP3；② 油耗5.0L/100km，可靠性经市场验证；③ 空间灵活（后排可放倒），适合家庭长途出行；④ 保养成本800元/次，后期省心。"
-                },
-                {
-                    name: "特斯拉Model Y",
-                    tag: "纯电动 | 中型SUV | 豪华纯电销冠",
-                    reason: "推荐理由：① 月销超4万台，20-30万纯电SUV第一；② 续航545-688km，满足长途出行；③ 自动驾驶配置领先，科技感拉满；④ 保养成本极低（仅需基础检查）。"
-                },
-                {
-                    name: "别克GL8 陆上公务舱",
-                    tag: "燃油 | MPV | 商务销冠",
-                    reason: "推荐理由：① 连续15年MPV销量冠军，商务接待首选；② 轴距3088mm，7座布局空间超大；③ 舒适性极佳（航空座椅/隔音优秀）；④ 适合多人出行或商务使用。"
-                }
-            ],
-            // 预算30万以上（总分37-48）
-            budget4: [
-                {
-                    name: "宝马3系",
-                    tag: "燃油 | 中型轿车 | 豪华轿车标杆",
-                    reason: "推荐理由：① 月销超1.5万台，豪华中型车销量TOP1；② 操控性同级最佳，兼顾驾驶与舒适；③ 配置丰富（哈曼卡顿/自动驾驶）；④ 适合注重品牌与驾驶体验的用户。"
-                },
-                {
-                    name: "奔驰GLC",
-                    tag: "燃油/混动 | 中型SUV | 豪华SUV销冠",
-                    reason: "推荐理由：① 月销超1.8万台，豪华中型SUV销量第一；② 内饰豪华感拉满，舒适性极佳；③ 混动版油耗6.0L/100km，降低使用成本；④ 适合商务/家庭多场景使用。"
-                },
-                {
-                    name: "奥迪Q5L",
-                    tag: "燃油 | 中型SUV | 性价比豪华SUV",
-                    reason: "推荐理由：① 月销超1.2万台，豪华SUV销量TOP3；② 四驱系统同级领先，通过性优秀；③ 空间宽敞（轴距2907mm），适合长途出行；④ 终端优惠大，35万左右可落地。"
-                }
-            ]
-        };
-
         // DOM元素
         const progressTip = document.getElementById('progressTip');
         const resultSection = document.getElementById('resultSection');
-        const carRecommendList = document.getElementById('carRecommendList');
+        const radarDesc = document.getElementById('radarDesc');
         const restartBtn = document.getElementById('restartBtn');
         const optionBtns = document.querySelectorAll('.option-btn');
         const nextBtns = document.querySelectorAll('.next-btn');
@@ -484,16 +410,13 @@
         const submitBtn = document.querySelector('.submit-btn');
         const totalQuestions = document.querySelectorAll('.question-section').length;
 
-        // 选中选项逻辑
+        // 选中选项逻辑（保持不变）
         optionBtns.forEach(btn => {
             btn.addEventListener('click', function() {
-                // 取消同组其他选项
                 this.closest('.option-list').querySelectorAll('.option-btn').forEach(b => {
                     b.classList.remove('selected');
                 });
-                // 选中当前选项
                 this.classList.add('selected');
-                // 存储答案
                 const qId = this.closest('.question-section').dataset.id;
                 userAnswers.answers[qId] = {
                     score: parseInt(this.dataset.score),
@@ -502,7 +425,7 @@
             });
         });
 
-        // 下一题逻辑
+        // 下一题逻辑（保持不变）
         nextBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 const currentSection = this.closest('.question-section');
@@ -522,7 +445,7 @@
             });
         });
 
-        // 上一题逻辑
+        // 上一题逻辑（保持不变）
         prevBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 const currentSection = this.closest('.question-section');
@@ -533,7 +456,6 @@
                 document.querySelector(`.question-section[data-id="${prevId}"]`).classList.add('active');
                 progressTip.textContent = `第 ${prevId} 题 / 共 ${totalQuestions} 题`;
 
-                // 恢复选中状态
                 if (userAnswers.answers[prevId]) {
                     const prevSection = document.querySelector(`.question-section[data-id="${prevId}"]`);
                     prevSection.querySelectorAll('.option-btn').forEach(b => {
@@ -545,7 +467,7 @@
             });
         });
 
-        // 提交并生成推荐
+        // 核心修改：提交后生成雷达图（替换原车型推荐逻辑）
         submitBtn.addEventListener('click', function() {
             const currentSection = this.closest('.question-section');
             const selectedBtn = currentSection.querySelector('.option-btn.selected');
@@ -555,50 +477,174 @@
                 return;
             }
 
-            // 计算总分
+            // 计算总分（用于辅助分析）
             userAnswers.totalScore = 0;
             for (let key in userAnswers.answers) {
                 userAnswers.totalScore += userAnswers.answers[key].score;
             }
 
-            // 根据预算（第1题）和总分匹配车型
-            let recommendCars = [];
-            const budgetType = userAnswers.answers['1'].value;
-            
-            if (budgetType === "10万以内") {
-                recommendCars = hotCars.budget1;
-            } else if (budgetType === "10-20万") {
-                recommendCars = hotCars.budget2;
-            } else if (budgetType === "20-30万") {
-                recommendCars = hotCars.budget3;
-            } else {
-                recommendCars = hotCars.budget4;
-            }
+            // 1. 映射问卷答案到雷达图维度（0-10分标准化）
+            const radarData = {
+                // 维度1：预算接受度（10分=高预算）
+                budget: userAnswers.answers['1'].score * 2.5,
+                // 维度2：空间需求（10分=超大空间）
+                space: userAnswers.answers['3'].score * 2.5,
+                // 维度3：能耗敏感度（反向映射，10分=极敏感）
+                energySensitivity: 10 - (userAnswers.answers['7'].score * 2.5) + 2.5,
+                // 维度4：科技配置需求（10分=高端配置）
+                techConfig: userAnswers.answers['10'].score * 2.5,
+                // 维度5：使用成本敏感度（反向映射，10分=极敏感）
+                costSensitivity: 10 - (userAnswers.answers['11'].score * 2.5) + 2.5,
+                // 维度6：场景适配性（10分=多场景/商务）
+                sceneAdapt: userAnswers.answers['2'].score * 2.5
+            };
 
-            // 渲染推荐结果
+            // 2. 生成雷达图解读文本
+            let descText = `<strong>你的购车偏好解读：</strong><br>`;
+            // 预算解读
+            if (radarData.budget <= 5) {
+                descText += "• 预算倾向：偏保守，优先考虑高性价比车型；<br>";
+            } else {
+                descText += "• 预算倾向：充足，可选择中高端/豪华车型；<br>";
+            }
+            // 空间解读
+            if (radarData.space <= 5) {
+                descText += "• 空间需求：低，适合小型车/紧凑型轿车；<br>";
+            } else {
+                descText += "• 空间需求：高，优先考虑SUV/MPV等大空间车型；<br>";
+            }
+            // 能耗解读
+            if (radarData.energySensitivity >= 8) {
+                descText += "• 能耗敏感度：极高，纯电动/混动车型是你的首选；<br>";
+            } else if (radarData.energySensitivity >= 5) {
+                descText += "• 能耗敏感度：较高，建议选择低油耗/低电耗车型；<br>";
+            } else {
+                descText += "• 能耗敏感度：低，可优先考虑性能型燃油车；<br>";
+            }
+            // 配置解读
+            if (radarData.techConfig >= 8) {
+                descText += "• 配置需求：高，建议选择智能配置丰富的车型；<br>";
+            } else if (radarData.techConfig >= 5) {
+                descText += "• 配置需求：中等，实用配置齐全即可；<br>";
+            } else {
+                descText += "• 配置需求：低，基础配置满足使用即可；<br>";
+            }
+            // 使用成本解读
+            if (radarData.costSensitivity >= 8) {
+                descText += "• 使用成本敏感度：极高，优先考虑保养/能耗低的车型；<br>";
+            } else {
+                descText += "• 使用成本敏感度：低，可接受较高的后期使用成本；<br>";
+            }
+            // 场景解读
+            if (radarData.sceneAdapt >= 8) {
+                descText += "• 场景适配：多场景需求，商务/长途出行适配性优先；<br>";
+            } else {
+                descText += "• 场景适配：单一场景，城市通勤为主，灵活便捷优先；";
+            }
+            radarDesc.innerHTML = descText;
+
+            // 3. 绘制雷达图
+            const ctx = document.getElementById('preferenceRadarChart').getContext('2d');
+            // 销毁已有图表（避免重复绘制）
+            if (window.radarChart) {
+                window.radarChart.destroy();
+            }
+            // 创建新雷达图
+            window.radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    // 雷达图维度标签
+                    labels: [
+                        '预算接受度',
+                        '空间需求',
+                        '能耗敏感度',
+                        '科技配置需求',
+                        '使用成本敏感度',
+                        '场景适配性'
+                    ],
+                    datasets: [{
+                        label: '你的购车偏好',
+                        data: [
+                            radarData.budget,
+                            radarData.space,
+                            radarData.energySensitivity,
+                            radarData.techConfig,
+                            radarData.costSensitivity,
+                            radarData.sceneAdapt
+                        ],
+                        // 雷达图样式
+                        backgroundColor: 'rgba(56, 178, 172, 0.2)',
+                        borderColor: 'rgba(56, 178, 172, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(56, 178, 172, 1)',
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    // 适配移动端
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    // 雷达图配置
+                    scales: {
+                        r: {
+                            angleLines: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: 12,
+                                    family: "PingFang SC, Microsoft YaHei"
+                                },
+                                color: '#4a5568'
+                            },
+                            ticks: {
+                                backdropColor: 'transparent',
+                                stepSize: 2,
+                                max: 10,
+                                min: 0,
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false // 隐藏图例（移动端更简洁）
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            padding: 10,
+                            titleFont: {
+                                size: 14
+                            },
+                            bodyFont: {
+                                size: 13
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 显示结果区域，隐藏题目
             currentSection.classList.remove('active');
             resultSection.style.display = 'block';
-            
-            let carHtml = '';
-            recommendCars.forEach(car => {
-                carHtml += `
-                    <div class="car-card">
-                        <div class="car-name">${car.name}</div>
-                        <div class="car-tag">${car.tag}</div>
-                        <div class="recommend-reason">${car.reason}</div>
-                    </div>
-                `;
-            });
-            carRecommendList.innerHTML = carHtml;
         });
 
-        // 重新开始
+        // 重新开始逻辑（保持不变）
         restartBtn.addEventListener('click', function() {
-            // 重置答案
             userAnswers.totalScore = 0;
             userAnswers.answers = {};
             
-            // 重置界面
+            // 销毁雷达图
+            if (window.radarChart) {
+                window.radarChart.destroy();
+            }
+            
             resultSection.style.display = 'none';
             document.querySelectorAll('.question-section').forEach(section => {
                 section.classList.remove('active');
